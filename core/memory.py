@@ -44,11 +44,15 @@ class Mem:
         try: self.pm.write_bytes(a, struct.pack('fff', x, y, z), 12)
         except: pass
 
+    def _va_off(self):
+        import core.offsets as ofs
+        return getattr(self, 'hw_va', ofs.VIEWANGLES)
+
     def angles(self):
-        return self._rv3(self.hw + VIEWANGLES)
+        return self._rv3(self.hw + self._va_off())
 
     def set_angles(self, p, y):
-        self._wv3(self.hw + VIEWANGLES, p, y, 0.0)
+        self._wv3(self.hw + self._va_off(), p, y, 0.0)
 
     def local_idx(self):
         return self._ri(self.cl + LOCAL_IDX)

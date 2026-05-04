@@ -1,5 +1,6 @@
+import struct, threading, time
 import customtkinter as ctk
-from tkinter import colorchooser
+from tkinter import colorchooser, messagebox
 
 from core.memory import Mem
 from mods.aim    import Aim
@@ -44,13 +45,19 @@ class App(ctk.CTk):
         self._slbl = ctk.CTkLabel(hdr, text="NOT ATTACHED", font=("Arial",10), text_color="#555")
         self._slbl.pack(side="right")
 
-        ctk.CTkButton(self, text="ATTACH TO CS 1.6", command=self._attach,
+        btns = ctk.CTkFrame(self, fg_color="transparent")
+        btns.pack(fill="x", padx=14, pady=(12,2))
+        ctk.CTkButton(btns, text="ATTACH", command=self._attach,
                       fg_color="#1e1040", hover_color="#2e1860",
                       border_color=AC, border_width=1,
                       font=("Arial",12,"bold"), height=36,
-                      corner_radius=8).pack(fill="x", padx=14, pady=(12,2))
+                      corner_radius=8).pack(side="left", fill="x", expand=True, padx=(0,4))
+        ctk.CTkButton(btns, text="SCAN", command=self._scan,
+                      fg_color="#0d1a0d", hover_color="#143014",
+                      border_color="#44cc44", border_width=1,
+                      font=("Arial",12,"bold"), height=36, width=70,
+                      corner_radius=8).pack(side="right")
 
-        # дебаг-строка
         self._dbg = ctk.CTkLabel(self, text="pitch=--  yaw=--  idx=--",
                                   font=("Courier",10), text_color="#333")
         self._dbg.pack(pady=(0,2))
@@ -155,6 +162,73 @@ class App(ctk.CTk):
         else:
             self._dot.configure(text_color="#f44")
             self._slbl.configure(text=f"ERROR: {msg[:28]}")
+
+    def _scan(self):
+        """Автопоиск оффсета viewangles — нажми и следуй инструкциям."""
+        if not self.mem.ok:
+            messagebox.showwarning("SCAN", "Сначала нажми ATTACH!")
+            return
+        threading.Thread(target=self._scan_thread, daemon=True).start()
+
+    def _scan_thread(self):
+        import pymem.process
+        pm   = self.mem.pm
+        base = self.mem.hw
+        try:
+            mod  = pymem.process.module_from_name(pm.process_handle, "hw.dll")
+            size = mod.SizeOfImage
+        except:
+            size = 0x800000
+
+        self._dbg.configure(text="SCAN: не двигай мышь 2 сек...", text_color="#fc8")
+        time.sleep(2)
+
+        # Читаем память hw.dll кусками
+        def read_all():
+            buf = b''
+            for off in range(0, size, 0x4000):
+                try: buf += pm.read_bytes(base + off, min(0x4000, size-off))
+                except: buf += b'\x00' * min(0x4000, size-off)
+            return buf
+
+        data1 = read_all()
+        # Кандидаты: два float подряд в диапазоне pitch(-89..89) yaw(-180..180)
+        cands = set()
+        for i in range(0, len(data1)-8, 4):
+            p, y = struct.unpack_from('ff', data1, i)
+            if -89 < p < 89 and -180 < y < 180:
+                cands.add(i)
+
+        self._dbg.configure(text=f"SCAN: поверни мышь влево 90°...", text_color="#fc8")
+        time.sleep(3)
+
+        data2 = read_all()
+        matches = []
+        for i in sorted(cands):
+            p1, y1 = struct.unpack_from('ff', data1, i)
+            p2, y2 = struct.unpack_from('ff', data2, i)
+            if -89 < p2 < 89 and -180 < y2 < 180 and abs(y2-y1) > 15:
+                matches.append((i, p2, y2))
+
+        if not matches:
+            self._dbg.configure(text="SCAN: не найдено. Повернись сильнее!", text_color="#f44")
+            return
+
+        off = matches[0][0]
+        p, y = matches[0][1], matches[0][2]
+
+        # Применяем найденный оффсет
+        import core.offsets as ofs
+        ofs.VIEWANGLES = off
+        self.mem.hw_va = off  # сохраняем для использования
+
+        self._dbg.configure(
+            text=f"FOUND: 0x{off:08X}  p={p:.1f} y={y:.1f}",
+            text_color="#4f8"
+        )
+        messagebox.showinfo("SCAN OK",
+            f"Оффсет найден: 0x{off:08X}\n\npitch={p:.1f}  yaw={y:.1f}\n\nAIM должен работать!"
+        )
 
     def _pick(self):
         col=colorchooser.askcolor(title="Color",color='#%02x%02x%02x'%self.sight.color)
