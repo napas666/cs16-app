@@ -1,10 +1,9 @@
 import threading, time
-from core.offsets import ENT_LIST, ENT_SIZE, ONGROUND
 
 class Hop:
     def __init__(self, mem):
-        self.mem = mem
-        self.on  = False
+        self.mem  = mem
+        self.on   = False
         self._air = False
         threading.Thread(target=self._run, daemon=True).start()
 
@@ -19,9 +18,7 @@ class Hop:
         try:
             import win32api, win32con
         except: return
-        me = self.mem.local_idx()
-        if me < 1: return
-        gnd = self.mem.onground(me)
+        gnd = self.mem.onground()
         if self._air and gnd:
             win32api.keybd_event(win32con.VK_SPACE, 0, 0, 0)
             time.sleep(0.014)

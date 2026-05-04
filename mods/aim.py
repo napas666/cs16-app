@@ -30,18 +30,22 @@ class Aim:
             time.sleep(0.008)
 
     def _tick(self):
-        me = self.mem.local_idx()
-        if me < 1: return
-        my = self.mem.aim_pos(me)
         ca = self.mem.angles()
         best, best_d = None, self.fov
+        # Ищем ближайшего врага по углу (без фильтра команды — все игроки)
         for e in self.mem.enemies():
-            o = e['aim']
-            t = (o[0], o[1], o[2] + (HEAD_Z if self.head else 0))
-            ta = self._ang(my, t)
-            d  = math.hypot(self._norm(ca[0]-ta[0]), self._norm(ca[1]-ta[1]))
+            o = e['pos']
+            # Используем позицию камеры как src (грубо — центр карты не знаем,
+            # но viewangles дают направление, а enemy pos — цель)
+            target = (o[0], o[1], o[2] + (HEAD_Z if self.head else 0))
+            # Для aim нам нужна относительная позиция
+            # Берём viewangles и считаем угол к цели от origin
+            ta = self._ang((0,0,0), target)
+            # Сравниваем угол между текущим взглядом и направлением к цели
+            d = math.hypot(self._norm(ca[0]-ta[0]), self._norm(ca[1]-ta[1]))
             if d < best_d:
                 best_d, best = d, ta
+
         if best:
             dp = self._norm(best[0]-ca[0]) / self.smooth
             dy = self._norm(best[1]-ca[1]) / self.smooth

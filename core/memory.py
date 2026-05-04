@@ -8,6 +8,7 @@ class Mem:
         self.hw   = 0
         self.cl   = 0
         self.ok   = False
+        self.hw_va = VIEWANGLES   # может быть переопределён SCAN-ом
 
     def attach(self):
         try:
@@ -22,7 +23,7 @@ class Mem:
 
     def alive(self):
         try:
-            self._ri(self.hw + VIEWANGLES)
+            self._ri(self.hw + self.hw_va)
             return True
         except:
             self.ok = False
@@ -32,10 +33,6 @@ class Mem:
         try: return self.pm.read_int(a)
         except: return 0
 
-    def _rf(self, a):
-        try: return self.pm.read_float(a)
-        except: return 0.0
-
     def _rv3(self, a):
         try: return struct.unpack('fff', self.pm.read_bytes(a, 12))
         except: return (0.0, 0.0, 0.0)
@@ -44,46 +41,45 @@ class Mem:
         try: self.pm.write_bytes(a, struct.pack('fff', x, y, z), 12)
         except: pass
 
-    def _va_off(self):
-        import core.offsets as ofs
-        return getattr(self, 'hw_va', ofs.VIEWANGLES)
+    def _rs(self, a, n):
+        try: return self.pm.read_bytes(a, n).split(b'\x00')[0].decode('utf-8','ignore')
+        except: return ""
 
+    # ── viewangles ────────────────────────────────────────
     def angles(self):
-        return self._rv3(self.hw + self._va_off())
+        return self._rv3(self.hw + self.hw_va)
 
     def set_angles(self, p, y):
-        self._wv3(self.hw + self._va_off(), p, y, 0.0)
+        self._wv3(self.hw + self.hw_va, p, y, 0.0)
 
-    def local_idx(self):
-        return self._ri(self.cl + LOCAL_IDX)
+    # ── локальный игрок ───────────────────────────────────
+    def local_team(self):
+        return self._ri(self.cl + LOCAL_TEAM)
 
-    def _ent(self, i):
-        return self.cl + ENT_LIST + i * ENT_SIZE
+    def onground(self):
+        return self._ri(self.hw + ONGROUND) == 1
 
-    def pos(self, i):
-        return self._rv3(self._ent(i) + R_ORIGIN)
+    # ── список игроков ────────────────────────────────────
+    def _pi_base(self, i):
+        # PlayerInfo[i] в hw.dll
+        return self.hw + ENT_LIST + i * ENT_SIZE
 
-    def aim_pos(self, i):
-        return self._rv3(self._ent(i) + CS_ORIGIN)
+    def player_origin(self, i):
+        return self._rv3(self._pi_base(i) + PI_ORIGIN)
 
-    def hp(self, i):
-        return self._ri(self._ent(i) + CS_HEALTH)
-
-    def team(self, i):
-        return self._ri(self._ent(i) + CS_TEAM)
-
-    def onground(self, i):
-        return self._ri(self._ent(i) + ONGROUND) != 0
+    def player_name(self, i):
+        return self._rs(self._pi_base(i) + PI_NAME, 44)
 
     def enemies(self):
-        me = self.local_idx()
-        my_team = self.team(me)
+        my_team = self.local_team()
         out = []
-        for i in range(1, 33):
-            if i == me: continue
-            h = self.hp(i)
-            if not (1 <= h <= 100): continue
-            t = self.team(i)
-            if t == my_team or t not in (1, 2): continue
-            out.append({'i': i, 'pos': self.pos(i), 'aim': self.aim_pos(i), 'hp': h})
+        for i in range(32):
+            name = self.player_name(i)
+            if not name or name.strip() == "":
+                continue
+            pos = self.player_origin(i)
+            # Фильтр: позиция должна быть реалистичной (не 0,0,0)
+            if pos == (0.0, 0.0, 0.0):
+                continue
+            out.append({'i': i, 'pos': pos, 'name': name})
         return out
