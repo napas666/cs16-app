@@ -21,6 +21,6 @@ class Hop:
         gnd = self.mem.onground()
         if self._air and gnd:
             win32api.keybd_event(win32con.VK_SPACE, 0, 0, 0)
-            time.sleep(0.014)
+            time.sleep(0.013)
             win32api.keybd_event(win32con.VK_SPACE, 0, win32con.KEYEVENTF_KEYUP, 0)
         self._air = not gnd
