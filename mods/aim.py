@@ -33,28 +33,23 @@ class Aim:
             time.sleep(0.008)
 
     def _tick(self):
-        ca = self.mem.angles()
+        ca      = self.mem.angles()          # текущий прицел (pitch, yaw, roll)
+        my_pos  = self.mem.local_origin()    # позиция локального игрока
         enemies = self.mem.enemies()
         if not enemies:
             return
 
         best, best_d = None, self.fov
 
-        # Позиция локального игрока — берём из первого found enemy как origin базу
-        # Для внешнего чита с этой структурой нет прямого доступа к своей позиции,
-        # поэтому aim считается по углу к абсолютным координатам цели
         for e in enemies:
             o = e['pos']
+            # Цель: позиция врага + смещение головы
             target = (o[0], o[1], o[2] + (HEAD_Z if self.head else 0))
-
-            # Угол к цели (абсолютный yaw через atan2)
-            ta = self._calc((0, 0, 0), target)
-
-            # Дельта между текущим взглядом и направлением к цели
-            dp = abs(self._norm(ca[0] - ta[0]))
-            dy = abs(self._norm(ca[1] - ta[1]))
-            d  = math.hypot(dp, dy)
-
+            # Угол от нашей позиции к цели
+            ta = self._calc(my_pos, target)
+            # Дистанция в угловом пространстве от текущего взгляда
+            d = math.hypot(self._norm(ca[0] - ta[0]),
+                           self._norm(ca[1] - ta[1]))
             if d < best_d:
                 best_d, best = d, ta
 

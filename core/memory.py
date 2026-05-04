@@ -67,12 +67,22 @@ class Mem:
     def pi_origin(self, i):
         return self._rv3(self._pi(i) + PI_ORIGIN)
 
+    def local_origin(self):
+        # Локальный игрок = индекс 1 в entity list
+        return self.pi_origin(1)
+
+    def local_name(self):
+        return self.pi_name(1)
+
     # ── список врагов ─────────────────────────────────────
     def enemies(self):
+        my_name = self.local_name()
         out = []
-        for i in range(1, 33):          # 0 = мировой объект, пропускаем
+        for i in range(1, 33):
             name = self.pi_name(i)
             if not name:
+                continue
+            if name == my_name:          # пропускаем себя
                 continue
             pos = self.pi_origin(i)
             if pos == (0.0, 0.0, 0.0):
